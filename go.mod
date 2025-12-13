@@ -1,4 +1,4 @@
-module github.com/Liphium/project-wizard/neogate
+module github.com/Liphium/neogate
 
 go 1.25.2
 
