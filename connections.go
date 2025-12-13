@@ -10,17 +10,16 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
-type Client struct {
+type Client[T any] struct {
 	Conn    *websocket.Conn
 	ID      string
 	Session string
-	Extra   interface{}
-	Data    interface{}
+	Data    T
 	Mutex   *sync.Mutex
 }
 
 // Sends an event to the client
-func (instance *Instance) SendEventToClient(c *Client, event Event) error {
+func (instance *Instance[T]) SendEventToClient(c *Client[T], event Event) error {
 	msg, err := sonic.Marshal(event)
 	if err != nil {
 		return err
@@ -34,7 +33,7 @@ func getKey(id string, session string) string {
 	return id + ":" + session
 }
 
-func (instance *Instance) AddClient(client Client) *Client {
+func (instance *Instance[T]) AddClient(client Client[T]) *Client[T] {
 
 	// Add the session
 	_, valid := instance.connectionsCache.Load(getKey(client.ID, client.Session))
@@ -48,11 +47,11 @@ func (instance *Instance) AddClient(client Client) *Client {
 	return &client
 }
 
-func (instance *Instance) UpdateClient(client *Client) {
+func (instance *Instance[T]) UpdateClient(client *Client[T]) {
 	instance.connectionsCache.Store(getKey(client.ID, client.Session), *client)
 }
 
-func (instance *Instance) GetSessions(id string) []string {
+func (instance *Instance[T]) GetSessions(id string) []string {
 	sessions, valid := instance.sessionsCache.Load(id)
 	if valid {
 		return sessions.([]string)
@@ -61,7 +60,7 @@ func (instance *Instance) GetSessions(id string) []string {
 	return []string{}
 }
 
-func (instance *Instance) addSession(id string, session string) {
+func (instance *Instance[T]) addSession(id string, session string) {
 
 	sessions, valid := instance.sessionsCache.Load(id)
 	if valid {
@@ -71,7 +70,7 @@ func (instance *Instance) addSession(id string, session string) {
 	}
 }
 
-func (instance *Instance) removeSession(id string, session string) {
+func (instance *Instance[T]) removeSession(id string, session string) {
 
 	sessions, valid := instance.sessionsCache.Load(id)
 	if valid {
@@ -88,7 +87,7 @@ func (instance *Instance) removeSession(id string, session string) {
 }
 
 // Remove a session from the account (DOES NOT DISCONNECT, there is an extra method for that)
-func (instance *Instance) Remove(id string, session string) {
+func (instance *Instance[T]) Remove(id string, session string) {
 	client, valid := instance.Get(id, session)
 	if valid {
 		err := client.Conn.Close()
@@ -103,7 +102,7 @@ func (instance *Instance) Remove(id string, session string) {
 }
 
 // Disconnect a client from the network
-func (instance *Instance) Disconnect(id string, session string) {
+func (instance *Instance[T]) Disconnect(id string, session string) {
 
 	// Get the client
 	client, valid := instance.Get(id, session)
@@ -117,7 +116,7 @@ func (instance *Instance) Disconnect(id string, session string) {
 }
 
 // Send bytes to an account id
-func (instance *Instance) SendToAccount(id string, msg []byte) error {
+func (instance *Instance[T]) SendToAccount(id string, msg []byte) error {
 	sessions, ok := instance.sessionsCache.Load(id)
 	if !ok {
 		return errors.New("no sessions found")
@@ -136,7 +135,7 @@ func (instance *Instance) SendToAccount(id string, msg []byte) error {
 	return nil
 }
 
-func (instance *Instance) SendToSession(id string, session string, msg []byte) bool {
+func (instance *Instance[T]) SendToSession(id string, session string, msg []byte) bool {
 	client, valid := instance.Get(id, session)
 	if !valid {
 		return false
@@ -146,7 +145,7 @@ func (instance *Instance) SendToSession(id string, session string, msg []byte) b
 	return true
 }
 
-func (instance *Instance) SendToClient(client *Client, msg []byte) error {
+func (instance *Instance[T]) SendToClient(client *Client[T], msg []byte) error {
 
 	msg, err := instance.Config.ClientEncodingMiddleware(client, instance, msg)
 	if err != nil {
@@ -165,7 +164,7 @@ func (instance *Instance) SendToClient(client *Client, msg []byte) error {
 	return client.Conn.WriteMessage(websocket.BinaryMessage, msg)
 }
 
-func (instance *Instance) ExistsConnection(id string, session string) bool {
+func (instance *Instance[T]) ExistsConnection(id string, session string) bool {
 	_, ok := instance.connectionsCache.Load(getKey(id, session))
 	if !ok {
 		return false
@@ -174,17 +173,17 @@ func (instance *Instance) ExistsConnection(id string, session string) bool {
 	return ok
 }
 
-func (instance *Instance) Get(id string, session string) (*Client, bool) {
+func (instance *Instance[T]) Get(id string, session string) (*Client[T], bool) {
 	client, valid := instance.connectionsCache.Load(getKey(id, session))
 	if !valid {
-		return &Client{}, false
+		return &Client[T]{}, false
 	}
 
-	cl := client.(Client)
+	cl := client.(Client[T])
 	return &cl, true
 }
 
-func (instance *Instance) GetConnections(id string) int {
+func (instance *Instance[T]) GetConnections(id string) int {
 	clients, ok := instance.sessionsCache.Load(id)
 	if !ok {
 		return 0

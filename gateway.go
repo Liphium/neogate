@@ -11,14 +11,8 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
-// The packet needed for authenticating at the beginning of a neogate connection.
-type AuthPacket struct {
-	Token       string `json:"token"`
-	Attachments string `json:"attachments"`
-}
-
 // Mount the neogate gateway using a fiber router.
-func (instance *Instance) MountGateway(router fiber.Router) {
+func (instance *Instance[T]) MountGateway(router fiber.Router) {
 
 	// Inject a middleware to check if the request is a websocket upgrade request
 	router.Use("/", func(c *fiber.Ctx) error {
@@ -38,7 +32,7 @@ func (instance *Instance) MountGateway(router fiber.Router) {
 }
 
 // Handles the websocket connection
-func ws(conn *websocket.Conn, instance *Instance) {
+func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -51,24 +45,26 @@ func ws(conn *websocket.Conn, instance *Instance) {
 	}()
 
 	// Let the connection time out after 30 seconds
-	conn.SetReadDeadline(time.Now().Add(time.Second * 30))
+	conn.SetReadDeadline(time.Now().Add(time.Second * instance.Config.HandshakeTimeout))
 
-	// Read the auth packet
-	var authPacket AuthPacket
-	if err := conn.ReadJSON(&authPacket); err != nil {
-		Log.Println("closed connection: couldn't decode auth packet: ", err)
-		return
+	// Complete the handshake
+	var handshakePacket T
+	if !isTypeNone(handshakePacket) {
+
+		// Get handshake packet
+		if err := conn.ReadJSON(&handshakePacket); err != nil {
+			Log.Println("closed connection: couldn't decode auth packet: ", err)
+			return
+		}
 	}
-
-	// Check if the token is valid
-	info, ok := instance.Config.CheckToken(authPacket.Token, authPacket.Attachments)
+	info, ok := instance.Config.Handshake(handshakePacket)
 	if !ok {
 		Log.Println("closed connection: invalid auth token")
 		return
 	}
 
 	// Make sure the session isn't already connected
-	if instance.ExistsConnection(info.Account, info.Session) {
+	if instance.ExistsConnection(info.ID, info.Session) {
 		Log.Println("closed connection: already connected")
 		return
 	}
@@ -85,32 +81,28 @@ func ws(conn *websocket.Conn, instance *Instance) {
 		}
 
 		// Get the client
-		client, valid := instance.Get(info.Account, info.Session)
+		client, valid := instance.Get(info.ID, info.Session)
 		if !valid {
 			return
 		}
 
 		// Remove the connection from the cache
 		instance.Config.ClientDisconnectHandler(client)
-		instance.Remove(info.Account, info.Session)
+		instance.Remove(info.ID, info.Session)
 
 		// Only remove adapter if all sessions are gone
-		if len(instance.GetSessions(info.Account)) == 0 {
-			instance.RemoveAdapter(info.Account)
+		if len(instance.GetSessions(info.ID)) == 0 {
+			instance.RemoveAdapter(info.ID)
 		}
 	}()
 
-	if instance.Config.ClientConnectHandler(client, authPacket.Attachments) {
-		return
-	}
-
 	// Add adapter for pipes (if this is the first session)
-	if len(instance.GetSessions(info.Account)) == 1 {
+	if len(instance.GetSessions(info.ID)) == 1 {
 		adapterName := instance.Config.ClientAdapterHandler(client)
 		instance.Adapt(CreateAction{
 			ID: adapterName,
 			OnEvent: func(c *AdapterContext) error {
-				if err := instance.SendToAccount(info.Account, c.Message); err != nil {
+				if err := instance.SendToAccount(info.ID, c.Message); err != nil {
 					instance.ReportClientError(client, "couldn't send received message", err)
 					return err
 				}
@@ -124,7 +116,7 @@ func ws(conn *websocket.Conn, instance *Instance) {
 		})
 	}
 
-	if instance.Config.ClientEnterNetworkHandler(client, authPacket.Attachments) {
+	if instance.Config.ClientEnterNetworkHandler(client, handshakePacket) {
 		return
 	}
 
@@ -133,9 +125,9 @@ func ws(conn *websocket.Conn, instance *Instance) {
 		if err != nil {
 
 			// Get the client for error reporting purposes
-			client, valid := instance.Get(info.Account, info.Session)
+			client, valid := instance.Get(info.ID, info.Session)
 			if !valid {
-				instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.Account, info.Session))
+				instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.ID, info.Session))
 				return
 			}
 
@@ -144,9 +136,9 @@ func ws(conn *websocket.Conn, instance *Instance) {
 		}
 
 		// Get the client
-		client, valid := instance.Get(info.Account, info.Session)
+		client, valid := instance.Get(info.ID, info.Session)
 		if !valid {
-			instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.Account, info.Session))
+			instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.ID, info.Session))
 			return
 		}
 
@@ -169,15 +161,16 @@ func ws(conn *websocket.Conn, instance *Instance) {
 			return
 		}
 
-		// Handle the action
-		if !instance.Handle(&Context{
+		ctx := &Context[T]{
 			Client:     client,
 			Data:       message,
 			Action:     args[0],
 			ResponseId: args[1],
-			Locale:     body["lc"].(string), // Parse the locale
 			Instance:   instance,
-		}) {
+		}
+
+		// Handle the action
+		if !instance.Handle(ctx) {
 			instance.ReportClientError(client, "couldn't handle action", fmt.Errorf("action=%s, response_id=%s", args[0], args[1]))
 			return
 		}
