@@ -44,7 +44,6 @@ func (info ClientInfo[T]) ToClient(conn *websocket.Conn) Client[T] {
 type Config[T any] struct {
 
 	// Config options
-	Secret           []byte        // JWT secret (for authorization)
 	HandshakeTimeout time.Duration // Timeout for handshake message
 
 	// Called when a client attempts to connection. Return true if the connection is allowed.
