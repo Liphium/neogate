@@ -4,17 +4,17 @@ import (
 	"github.com/bytedance/sonic"
 )
 
-type Context[T any] struct {
-	Client     *Client[T]
+type Context struct {
+	Client     *Client
 	Action     string // The action to perform
 	ResponseId string
 	Data       []byte
-	Instance   *Instance[T]
+	Instance   *Instance
 }
 
 // Create a handler for an action using generics (with parsing already implemented)
-func CreateHandlerFor[T any](instance *Instance[T], action string, handler func(*Context[T], T) Event) {
-	instance.routes[action] = func(c *Context[T]) Event {
+func CreateHandlerFor[T any](instance *Instance, action string, handler func(*Context, T) Event) {
+	instance.routes[action] = func(c *Context) Event {
 
 		// Parse the action
 		var action Message[T]
@@ -27,7 +27,7 @@ func CreateHandlerFor[T any](instance *Instance[T], action string, handler func(
 	}
 }
 
-func (instance *Instance[T]) Handle(ctx *Context[T]) bool {
+func (instance *Instance) Handle(ctx *Context) bool {
 
 	// Check if the action exists
 	if instance.routes[ctx.Action] == nil {
@@ -41,7 +41,7 @@ func (instance *Instance[T]) Handle(ctx *Context[T]) bool {
 	return true
 }
 
-func (instance *Instance[T]) route(ctx *Context[T]) {
+func (instance *Instance) route(ctx *Context) {
 	defer func() {
 		if err := recover(); err != nil {
 			Log.Println("recovered from error in action", ctx.Action, "by", ctx.Client.ID, ":", err)

@@ -12,7 +12,7 @@ import (
 )
 
 // Mount the neogate gateway using a fiber router.
-func (instance *Instance[T]) MountGateway(router fiber.Router) {
+func (instance *Instance) MountGateway(router fiber.Router) {
 
 	// Inject a middleware to check if the request is a websocket upgrade request
 	router.Use("/", func(c *fiber.Ctx) error {
@@ -46,7 +46,7 @@ func (instance *Instance[T]) MountGateway(router fiber.Router) {
 }
 
 // Handles the websocket connection
-func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
+func ws(conn *websocket.Conn, instance *Instance) {
 
 	defer func() {
 		if err := recover(); err != nil {
@@ -59,7 +59,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 	}()
 
 	// Get info from handshake in upgrade request
-	info := conn.Locals("info").(ClientInfo[T])
+	info := conn.Locals("info").(ClientInfo)
 
 	// Make sure there is an infinite read timeout again (1 week should be enough)
 	conn.SetReadDeadline(time.Now().Add(time.Hour * 24 * 7))
@@ -153,7 +153,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 			return
 		}
 
-		ctx := &Context[T]{
+		ctx := &Context{
 			Client:     client,
 			Data:       message,
 			Action:     args[0],
