@@ -9,17 +9,17 @@ type NormalResponseStruct struct {
 	Message string `json:"message,omitempty"`
 }
 
-func NormalResponse(ctx *Context, data interface{}) Event {
+func NormalResponse[T any](ctx *Context[T], data interface{}) Event {
 	return Response(ctx, data, ctx.Instance)
 }
 
-func SuccessResponse(ctx *Context) Event {
+func SuccessResponse[T any](ctx *Context[T]) Event {
 	return Response(ctx, NormalResponseStruct{
 		Success: true,
 	}, ctx.Instance)
 }
 
-func ErrorResponse(ctx *Context, message string, err error) Event {
+func ErrorResponse[T any](ctx *Context[T], message string, err error) Event {
 
 	if DebugLogs {
 		Log.Println("error with action "+ctx.Action+" (", message, "): ", err)
@@ -32,7 +32,7 @@ func ErrorResponse(ctx *Context, message string, err error) Event {
 	}, ctx.Instance)
 }
 
-func Response(ctx *Context, data interface{}, instance *Instance) Event {
+func Response[T any](ctx *Context[T], data interface{}, instance *Instance[T]) Event {
 	return Event{
 		Name: "res:" + ctx.Action + ":" + ctx.ResponseId,
 		Data: data,

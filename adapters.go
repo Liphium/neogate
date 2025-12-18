@@ -36,7 +36,7 @@ type CreateAction struct {
 }
 
 // Register a new adapter for websocket/sl (all safe protocols)
-func (instance *Instance) Adapt(createAction CreateAction) {
+func (instance *Instance[T]) Adapt(createAction CreateAction) {
 	_, ok := instance.adapters.Load(createAction.ID)
 	if ok {
 		instance.adapters.Delete(createAction.ID)
@@ -52,12 +52,12 @@ func (instance *Instance) Adapt(createAction CreateAction) {
 }
 
 // Remove an adapter from the instance
-func (instance *Instance) RemoveAdapter(ID string) {
+func (instance *Instance[T]) RemoveAdapter(ID string) {
 	instance.adapters.Delete(ID)
 }
 
 // Handles receiving messages from the target and passes them to the adapter
-func (instance *Instance) AdapterReceive(ID string, event Event, msg []byte) error {
+func (instance *Instance[T]) AdapterReceive(ID string, event Event, msg []byte) error {
 
 	obj, ok := instance.adapters.Load(ID)
 	if !ok {
@@ -83,7 +83,7 @@ func (instance *Instance) AdapterReceive(ID string, event Event, msg []byte) err
 }
 
 // Send an event to all adapters
-func (instance *Instance) Send(adapters []string, event Event) error {
+func (instance *Instance[T]) Send(adapters []string, event Event) error {
 	msg, err := sonic.Marshal(event)
 	if err != nil {
 		return err
@@ -98,6 +98,6 @@ func (instance *Instance) Send(adapters []string, event Event) error {
 // Sends an event to the account.
 //
 // Only returns errors for encoding, not retrieval (cause adapters handle that themselves).
-func (instance *Instance) SendOne(adapter string, event Event) error {
+func (instance *Instance[T]) SendOne(adapter string, event Event) error {
 	return instance.Send([]string{adapter}, event)
 }
