@@ -19,6 +19,20 @@ func (instance *Instance[T]) MountGateway(router fiber.Router) {
 
 		// Check if it is a websocket upgrade request
 		if websocket.IsWebSocketUpgrade(c) {
+			info, ok := instance.Config.Handshake(c)
+			if !ok {
+				Log.Println("closed connection: invalid auth token")
+				return c.SendStatus(fiber.StatusBadRequest)
+			}
+
+			// Make sure the session isn't already connected
+			if instance.ExistsConnection(info.ID, info.Session) {
+				Log.Println("closed connection: already connected")
+				return c.SendStatus(fiber.StatusBadRequest)
+			}
+
+			c.Locals("info", info)
+
 			return c.Next()
 		}
 
@@ -44,30 +58,8 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		conn.Close()
 	}()
 
-	// Let the connection time out after 30 seconds
-	conn.SetReadDeadline(time.Now().Add(time.Second * instance.Config.HandshakeTimeout))
-
-	// Complete the handshake
-	var handshakePacket T
-	if !isTypeNone(handshakePacket) {
-
-		// Get handshake packet
-		if err := conn.ReadJSON(&handshakePacket); err != nil {
-			Log.Println("closed connection: couldn't decode auth packet: ", err)
-			return
-		}
-	}
-	info, ok := instance.Config.Handshake(handshakePacket)
-	if !ok {
-		Log.Println("closed connection: invalid auth token")
-		return
-	}
-
-	// Make sure the session isn't already connected
-	if instance.ExistsConnection(info.ID, info.Session) {
-		Log.Println("closed connection: already connected")
-		return
-	}
+	// Get info from handshake in upgrade request
+	info := conn.Locals("info").(ClientInfo[T])
 
 	// Make sure there is an infinite read timeout again (1 week should be enough)
 	conn.SetReadDeadline(time.Now().Add(time.Hour * 24 * 7))
@@ -116,7 +108,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		})
 	}
 
-	if instance.Config.ClientEnterNetworkHandler(client, handshakePacket) {
+	if instance.Config.ClientEnterNetworkHandler(client, info.Data) {
 		return
 	}
 

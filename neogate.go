@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log"
 	"sync"
-	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 )
 
@@ -42,13 +42,9 @@ func (info ClientInfo[T]) ToClient(conn *websocket.Conn) Client[T] {
 // ! If the functions aren't implemented pipesfiber will panic
 // The generic should be the type of the handshake request
 type Config[T any] struct {
-
-	// Config options
-	HandshakeTimeout time.Duration // Timeout for handshake message
-
 	// Called when a client attempts to connection. Return true if the connection is allowed.
 	// MUST BE SPECIFIED.
-	Handshake func(data T) (ClientInfo[T], bool)
+	Handshake func(c *fiber.Ctx) (ClientInfo[T], bool)
 
 	// Client handlers
 	ClientDisconnectHandler   func(client *Client[T])
