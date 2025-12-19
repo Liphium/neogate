@@ -114,23 +114,15 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 
 	for {
 		_, msg, err := conn.ReadMessage()
-		if err != nil {
-
-			// Get the client for error reporting purposes
-			client, valid := instance.Get(info.ID, info.Session)
-			if !valid {
-				instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.ID, info.Session))
-				return
-			}
-
-			instance.ReportClientError(client, "couldn't read message", err)
-			return
-		}
 
 		// Get the client
 		client, valid := instance.Get(info.ID, info.Session)
 		if !valid {
 			instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.ID, info.Session))
+			return
+		}
+		if err != nil {
+			instance.ReportClientError(client, "couldn't read message", err)
 			return
 		}
 
@@ -142,7 +134,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		}
 
 		// Unmarshal the message to extract a few things
-		var body map[string]interface{}
+		var body map[string]any
 		if err := sonic.Unmarshal(message, &body); err != nil {
 			return
 		}
