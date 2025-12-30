@@ -23,17 +23,18 @@ type Instance[T any] struct {
 }
 
 type ClientInfo[T any] struct {
-	ID      string // Identifier of the account
-	Session string // Identifier of the session
-	Data    T      // Session data you can decide how to fill
+	ID        string // Identifier of the account
+	sessionID string // Identifier of the session
+	Data      T      // Session data you can decide how to fill
 }
 
 // Convert the client information to a client that can be used by neogate.
 func (info ClientInfo[T]) ToClient(conn *websocket.Conn) Client[T] {
+
 	return Client[T]{
 		Conn:    conn,
 		ID:      info.ID,
-		Session: info.Session,
+		Session: info.sessionID,
 		Data:    info.Data,
 		Mutex:   &sync.Mutex{},
 	}
@@ -51,7 +52,8 @@ type Config[T any] struct {
 	ClientEnterNetworkHandler func(client *Client[T], data T) bool // Called after pipes adapter is registered, returns if the client should be disconnected (true = disconnect)
 
 	// Determines the id of the event adapter for a client.
-	ClientAdapterHandler func(client *Client[T]) string
+	// Returns id of account adapter based on client.ID, and if of session adapter based on client.Session
+	ClientAdapterHandler func(client *Client[T]) (string, string)
 
 	// Codec middleware
 	ClientEncodingMiddleware func(client *Client[T], instance *Instance[T], message []byte) ([]byte, error)

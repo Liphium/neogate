@@ -41,7 +41,7 @@ func (instance *Instance[T]) AddClient(client Client[T]) *Client[T] {
 
 	// If the session is not yet added, make sure to add it to the list
 	if !valid {
-		instance.addSession(client.ID, client.Session)
+		instance.addSession(&client)
 	}
 
 	return &client
@@ -60,17 +60,39 @@ func (instance *Instance[T]) GetSessions(id string) []string {
 	return []string{}
 }
 
-func (instance *Instance[T]) addSession(id string, session string) {
+func (instance *Instance[T]) addSession(client *Client[T]) {
+	id := client.ID
+	sessionID := client.Session
+
+	_, sessionAdapterName := instance.Config.ClientAdapterHandler(client)
+	instance.Adapt(CreateAction{
+		ID: sessionAdapterName,
+		OnEvent: func(c *AdapterContext) error {
+			if err := instance.SendToClient(client, c.Message); err != nil {
+				instance.ReportClientError(client, "couldn't send received message", err)
+				return err
+			}
+			return nil
+		},
+
+		// Disconnect the user on error
+		OnError: func(err error) {
+			instance.RemoveAdapter(sessionAdapterName)
+		},
+	})
 
 	sessions, valid := instance.sessionsCache.Load(id)
 	if valid {
-		instance.sessionsCache.Store(id, append(sessions.([]string), session))
+		instance.sessionsCache.Store(id, append(sessions.([]string), sessionID))
 	} else {
-		instance.sessionsCache.Store(id, []string{session})
+		instance.sessionsCache.Store(id, []string{sessionID})
 	}
 }
 
 func (instance *Instance[T]) removeSession(id string, session string) {
+
+	// Remove adapter for session
+	instance.RemoveAdapter(session)
 
 	sessions, valid := instance.sessionsCache.Load(id)
 	if valid {
@@ -88,15 +110,11 @@ func (instance *Instance[T]) removeSession(id string, session string) {
 
 // Remove a session from the account (DOES NOT DISCONNECT, there is an extra method for that)
 func (instance *Instance[T]) Remove(id string, session string) {
-	client, valid := instance.Get(id, session)
-	if valid {
-		err := client.Conn.Close()
-		if err != nil {
-			instance.ReportGeneralError("couldn't disconnect client", err)
-		}
-	} else {
-		instance.ReportGeneralError("client "+id+" doesn't exist", errors.New("couldn't delete"))
-	}
+
+	// Disconnect in case there was a panic
+	instance.Disconnect(id, session)
+
+	// Cleanup session
 	instance.connectionsCache.Delete(getKey(id, session))
 	instance.removeSession(id, session)
 }
@@ -107,30 +125,26 @@ func (instance *Instance[T]) Disconnect(id string, session string) {
 	// Get the client
 	client, valid := instance.Get(id, session)
 	if !valid {
+		instance.ReportGeneralError("client "+id+" doesn't exist", errors.New("couldn't delete"))
 		return
 	}
 
 	// This is a little weird for disconnecting, but it works, so I'm not complaining
 	client.Conn.SetReadDeadline(time.Now().Add(time.Microsecond * 1))
-	client.Conn.Close()
+	if err := client.Conn.Close(); err != nil {
+		instance.ReportGeneralError("couldn't disconnect client", err)
+	}
 }
 
 // Send bytes to an account id
-func (instance *Instance[T]) SendToAccount(id string, msg []byte) error {
-	sessions, ok := instance.sessionsCache.Load(id)
+func (instance *Instance[T]) SendToAccount(id string, event Event) error {
+	sessionIds, ok := instance.sessionsCache.Load(id)
 	if !ok {
 		return errors.New("no sessions found")
 	}
 
-	for _, session := range sessions.([]string) {
-		client, valid := instance.Get(id, session)
-		if !valid {
-			continue
-		}
-
-		if err := instance.SendToClient(client, msg); err != nil {
-			return err
-		}
+	if err := instance.Send(sessionIds.([]string), event); err != nil {
+		return err
 	}
 	return nil
 }
