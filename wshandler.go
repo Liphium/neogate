@@ -13,11 +13,11 @@ type Context[T any] struct {
 }
 
 // Create a handler for an action using generics (with parsing already implemented)
-func CreateHandlerFor[T any](instance *Instance[T], action string, handler func(*Context[T], T) Event) {
+func CreateHandlerFor[T, A any](instance *Instance[T], action string, handler func(*Context[T], A) Event) {
 	instance.routes[action] = func(c *Context[T]) Event {
 
 		// Parse the action
-		var action Message[T]
+		var action Message[A]
 		if err := sonic.Unmarshal(c.Data, &action); err != nil {
 			return ErrorResponse(c, "Invalid request.", err)
 		}
