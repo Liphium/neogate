@@ -25,8 +25,12 @@ func (instance *Instance[T]) MountGateway(router fiber.Router) {
 				return c.SendStatus(fiber.StatusBadRequest)
 			}
 
-			// Create session id
-			info.sessionID = info.ID + ":" + GenerateToken(16)
+			// Create a unique session id to identify this specific session
+			currentSession := GenerateToken(16)
+			for instance.ExistsConnection(info.ID, currentSession) {
+				currentSession = GenerateToken(16)
+			}
+			info.sessionID = currentSession
 
 			// Make sure the session isn't already connected
 			if instance.ExistsConnection(info.ID, info.sessionID) {
