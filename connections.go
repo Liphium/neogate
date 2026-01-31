@@ -166,11 +166,6 @@ func (instance *Instance[T]) SendToClient(client *Client[T], msg []byte) error {
 		return err
 	}
 
-	// Make sure there are no concurrent writes
-	if client.Mutex == nil {
-		client.Mutex = &sync.Mutex{}
-	}
-
 	// Lock and unlock mutex after writing
 	client.Mutex.Lock()
 	defer client.Mutex.Unlock()
