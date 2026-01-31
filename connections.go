@@ -46,7 +46,7 @@ func (instance *Instance[T]) AddClient(client *Client[T]) {
 }
 
 func (instance *Instance[T]) UpdateClient(client *Client[T]) {
-	instance.connectionsCache.Store(getKey(client.ID, client.Session), *client)
+	instance.connectionsCache.Store(getKey(client.ID, client.Session), client)
 }
 
 func (instance *Instance[T]) GetSessions(id string) []string {
