@@ -33,7 +33,7 @@ func getKey(id string, session string) string {
 	return id + ":" + session
 }
 
-func (instance *Instance[T]) AddClient(client Client[T]) *Client[T] {
+func (instance *Instance[T]) AddClient(client *Client[T]) {
 
 	// Add the session
 	_, valid := instance.connectionsCache.Load(getKey(client.ID, client.Session))
@@ -41,10 +41,8 @@ func (instance *Instance[T]) AddClient(client Client[T]) *Client[T] {
 
 	// If the session is not yet added, make sure to add it to the list
 	if !valid {
-		instance.addSession(&client)
+		instance.addSession(client)
 	}
-
-	return &client
 }
 
 func (instance *Instance[T]) UpdateClient(client *Client[T]) {
@@ -129,6 +127,9 @@ func (instance *Instance[T]) Disconnect(id string, session string) {
 		return
 	}
 
+	client.Mutex.Lock()
+	defer client.Mutex.Unlock()
+
 	// This is a little weird for disconnecting, but it works, so I'm not complaining
 	client.Conn.SetReadDeadline(time.Now().Add(time.Microsecond * 1))
 	if err := client.Conn.Close(); err != nil {
@@ -185,11 +186,10 @@ func (instance *Instance[T]) ExistsConnection(id string, session string) bool {
 func (instance *Instance[T]) Get(id string, session string) (*Client[T], bool) {
 	client, valid := instance.connectionsCache.Load(getKey(id, session))
 	if !valid {
-		return &Client[T]{}, false
+		return nil, false
 	}
 
-	cl := client.(Client[T])
-	return &cl, true
+	return client.(*Client[T]), true
 }
 
 func (instance *Instance[T]) GetConnections(id string) int {

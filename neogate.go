@@ -29,9 +29,9 @@ type ClientInfo[T any] struct {
 }
 
 // Convert the client information to a client that can be used by neogate.
-func (info ClientInfo[T]) ToClient(conn *websocket.Conn) Client[T] {
+func (info ClientInfo[T]) ToClient(conn *websocket.Conn) *Client[T] {
 
-	return Client[T]{
+	return &Client[T]{
 		Conn:    conn,
 		ID:      info.ID,
 		Session: info.sessionID,

@@ -54,8 +54,7 @@ func (instance *Instance[T]) MountGateway(router fiber.Router) {
 
 // Handles the websocket connection
 func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
-
-	defer func() {
+	deferFunc := func() {
 		if err := recover(); err != nil {
 			Log.Println("There was an error with a connection: ", err)
 			debug.PrintStack()
@@ -63,6 +62,10 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 
 		// Close the connection
 		conn.Close()
+	}
+
+	defer func() {
+		deferFunc()
 	}()
 
 	// Get info from handshake in upgrade request
@@ -71,9 +74,10 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 	// Make sure there is an infinite read timeout again (1 week should be enough)
 	conn.SetReadDeadline(time.Now().Add(time.Hour * 24 * 7))
 
-	client := instance.AddClient(info.ToClient(conn))
+	client := info.ToClient(conn)
+	instance.AddClient(client)
 
-	defer func() {
+	deferFunc = func() {
 
 		// Recover from a failure (in case of a cast issue maybe?)
 		if err := recover(); err != nil {
@@ -94,7 +98,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		if len(instance.GetSessions(client.ID)) == 0 {
 			instance.RemoveAdapter(client.ID)
 		}
-	}()
+	}
 
 	// Add adapter for pipes (if this is the first session)
 	if len(instance.GetSessions(info.ID)) == 1 {
