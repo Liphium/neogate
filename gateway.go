@@ -164,6 +164,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		}
 		args := strings.Split(actionString, ":")
 		if len(args) != 2 {
+			instance.ReportClientError(client, "action field should consist of action:responseId", err)
 			return
 		}
 		action := args[0]
