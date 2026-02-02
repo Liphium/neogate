@@ -134,7 +134,12 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 			return
 		}
 		if err != nil {
-			instance.ReportClientError(client, "couldn't read message", err)
+
+			// Only log err if it is not due to expected connection closure
+			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				instance.ReportClientError(client, "couldn't read message", err)
+			}
+
 			return
 		}
 
@@ -151,23 +156,31 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 			return
 		}
 
-		// Extract the response id from the message
-		args := strings.Split(body["action"].(string), ":")
-		if len(args) != 2 {
+		// Extract the response id and action from the message
+		actionString, ok := body["action"].(string)
+		if !ok {
+			instance.ReportClientError(client, "missing string field action", nil)
 			return
 		}
+		args := strings.Split(actionString, ":")
+		if len(args) != 2 {
+			instance.ReportClientError(client, "action field should consist of action:responseId", nil)
+			return
+		}
+		action := args[0]
+		responseId := args[1]
 
 		ctx := &Context[T]{
 			Client:     client,
 			Data:       message,
-			Action:     args[0],
-			ResponseId: args[1],
+			Action:     action,
+			ResponseId: responseId,
 			Instance:   instance,
 		}
 
 		// Handle the action
 		if !instance.Handle(ctx) {
-			instance.ReportClientError(client, "couldn't handle action", fmt.Errorf("action=%s, response_id=%s", args[0], args[1]))
+			instance.ReportClientError(client, "couldn't handle action", fmt.Errorf("action=%s, response_id=%s", action, responseId))
 			return
 		}
 	}
