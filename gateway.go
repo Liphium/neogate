@@ -159,12 +159,12 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		// Extract the response id and action from the message
 		actionString, ok := body["action"].(string)
 		if !ok {
-			instance.ReportClientError(client, "missing string field action", err)
+			instance.ReportClientError(client, "missing string field action", nil)
 			return
 		}
 		args := strings.Split(actionString, ":")
 		if len(args) != 2 {
-			instance.ReportClientError(client, "action field should consist of action:responseId", err)
+			instance.ReportClientError(client, "action field should consist of action:responseId", nil)
 			return
 		}
 		action := args[0]
