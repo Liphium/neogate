@@ -3,14 +3,12 @@ package neogate
 import (
 	"errors"
 	"sync"
-
-	"github.com/bytedance/sonic"
 )
 
 type AdapterFunc = func(*AdapterContext) error
 
 type Adapter struct {
-	ID    string      // Identifier of the client
+	ID    string      // Identifier of the adapter
 	Mutex *sync.Mutex // Mutex to prevent concurrent exceptions (can happen with connections, better handle this on the neogate level)
 
 	// Functions
@@ -25,8 +23,8 @@ type AdapterContext struct {
 }
 
 type Event struct {
-	Name string      `json:"name"`
-	Data interface{} `json:"data"`
+	Name string `json:"name"`
+	Data any    `json:"data"`
 }
 
 type CreateAction struct {
@@ -80,24 +78,4 @@ func (instance *Instance[T]) AdapterReceive(ID string, event Event, msg []byte) 
 		Log.Printf("[ws] Error receiving message from target %s: %s \n", ID, err)
 	}
 	return err
-}
-
-// Send an event to all adapters
-func (instance *Instance[T]) Send(adapters []string, event Event) error {
-	msg, err := sonic.Marshal(event)
-	if err != nil {
-		return err
-	}
-
-	for _, adapter := range adapters {
-		instance.AdapterReceive(adapter, event, msg)
-	}
-	return nil
-}
-
-// Sends an event to the account.
-//
-// Only returns errors for encoding, not retrieval (cause adapters handle that themselves).
-func (instance *Instance[T]) SendOne(adapter string, event Event) error {
-	return instance.Send([]string{adapter}, event)
 }

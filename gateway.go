@@ -27,16 +27,10 @@ func (instance *Instance[T]) MountGateway(router fiber.Router) {
 
 			// Create a unique session id to identify this specific session
 			currentSession := GenerateToken(16)
-			for instance.ExistsConnection(info.ID, currentSession) {
+			for instance.ExistsConnection(info.UserId, currentSession) {
 				currentSession = GenerateToken(16)
 			}
-			info.sessionID = currentSession
-
-			// Make sure the session isn't already connected
-			if instance.ExistsConnection(info.ID, info.sessionID) {
-				Log.Println("closed connection: already connected")
-				return c.SendStatus(fiber.StatusBadRequest)
-			}
+			info.sessionId = currentSession
 
 			c.Locals("info", info)
 
@@ -69,45 +63,45 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 	}()
 
 	// Get info from handshake in upgrade request
-	info := conn.Locals("info").(ClientInfo[T])
+	info := conn.Locals("info").(SessionInfo[T])
 
 	// Make sure there is an infinite read timeout again (1 week should be enough)
 	conn.SetReadDeadline(time.Now().Add(time.Hour * 24 * 7))
 
-	client := info.ToClient(conn)
-	instance.AddClient(client)
+	session := info.toSession(conn)
+	instance.addSession(session)
 
 	deferFunc = func() {
 
 		// Recover from a failure (in case of a cast issue maybe?)
 		if err := recover(); err != nil {
-			Log.Println("connection with", info.ID, "crashed cause of:", err)
+			Log.Println("connection with", info.UserId, "crashed cause of:", err)
 		}
 
-		// Get the client
-		client, valid := instance.Get(info.ID, info.sessionID)
+		// Get the session
+		session, valid := instance.Get(info.UserId, info.sessionId)
 		if !valid {
 			return
 		}
 
 		// Remove the connection from the cache
-		instance.Config.ClientDisconnectHandler(client)
-		instance.Remove(client.ID, client.Session)
+		instance.Config.SessionDisconnectHandler(session)
+		instance.RemoveSession(session.userId, session.sessionId)
 
 		// Only remove adapter if all sessions are gone
-		if len(instance.GetSessions(client.ID)) == 0 {
-			instance.RemoveAdapter(client.ID)
+		if len(instance.GetSessions(session.userId)) == 0 {
+			instance.RemoveAdapter(session.userId)
 		}
 	}
 
 	// Add adapter for pipes (if this is the first session)
-	if len(instance.GetSessions(info.ID)) == 1 {
-		accountAdapterName, _ := instance.Config.ClientAdapterHandler(client)
+	if len(instance.GetSessions(info.UserId)) == 1 {
+		userAdapterName, _ := instance.Config.SessionAdapterHandler(session)
 		instance.Adapt(CreateAction{
-			ID: accountAdapterName,
+			ID: userAdapterName,
 			OnEvent: func(c *AdapterContext) error {
-				if err := instance.SendToAccount(info.ID, *c.Event); err != nil {
-					instance.ReportClientError(client, "couldn't send received message", err)
+				if err := instance.SendEventToUser(info.UserId, *c.Event); err != nil {
+					instance.ReportSessionError(session, "couldn't send received message", err)
 					return err
 				}
 				return nil
@@ -115,38 +109,38 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 
 			// Disconnect the user on error
 			OnError: func(err error) {
-				instance.RemoveAdapter(accountAdapterName)
+				instance.RemoveAdapter(userAdapterName)
 			},
 		})
 	}
 
-	if instance.Config.ClientEnterNetworkHandler(client, info.Data) {
+	if instance.Config.SessionEnterNetworkHandler(session, info.Data) {
 		return
 	}
 
 	for {
 		_, msg, err := conn.ReadMessage()
 
-		// Get the client
-		client, valid := instance.Get(info.ID, info.sessionID)
+		// Get the session
+		session, valid := instance.Get(info.UserId, info.sessionId)
 		if !valid {
-			instance.ReportGeneralError("couldn't get client", fmt.Errorf("%s (%s)", info.ID, info.sessionID))
+			instance.ReportGeneralError("couldn't get session", fmt.Errorf("%s (%s)", info.UserId, info.sessionId))
 			return
 		}
 		if err != nil {
 
 			// Only log err if it is not due to expected connection closure
 			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				instance.ReportClientError(client, "couldn't read message", err)
+				instance.ReportSessionError(session, "couldn't read message", err)
 			}
 
 			return
 		}
 
 		// Decode the message
-		message, err := instance.Config.DecodingMiddleware(client, instance, msg)
+		message, err := instance.Config.DecodingMiddleware(session, instance, msg)
 		if err != nil {
-			instance.ReportClientError(client, "couldn't decode message", err)
+			instance.ReportSessionError(session, "couldn't decode message", err)
 			return
 		}
 
@@ -159,19 +153,19 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 		// Extract the response id and action from the message
 		actionString, ok := body["action"].(string)
 		if !ok {
-			instance.ReportClientError(client, "missing string field action", nil)
+			instance.ReportSessionError(session, "missing string field action", nil)
 			return
 		}
 		args := strings.Split(actionString, ":")
 		if len(args) != 2 {
-			instance.ReportClientError(client, "action field should consist of action:responseId", nil)
+			instance.ReportSessionError(session, "action field should consist of action:responseId", nil)
 			return
 		}
 		action := args[0]
 		responseId := args[1]
 
 		ctx := &Context[T]{
-			Client:     client,
+			Session:    session,
 			Data:       message,
 			Action:     action,
 			ResponseId: responseId,
@@ -180,7 +174,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 
 		// Handle the action
 		if !instance.Handle(ctx) {
-			instance.ReportClientError(client, "couldn't handle action", fmt.Errorf("action=%s, response_id=%s", action, responseId))
+			instance.ReportSessionError(session, "couldn't handle action", fmt.Errorf("action=%s, response_id=%s", action, responseId))
 			return
 		}
 	}

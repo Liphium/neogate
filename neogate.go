@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/websocket/v2"
 )
 
 type None struct{}
@@ -16,66 +15,49 @@ var Log = log.New(log.Writer(), "neogate ", log.Flags())
 
 type Instance[T any] struct {
 	Config           Config[T]
-	connectionsCache *sync.Map // ID:Session -> Client
-	sessionsCache    *sync.Map // ID -> Session list
-	adapters         *sync.Map // ID -> Adapter
+	connectionsCache *sync.Map // UserId:sessionId -> *Session
+	sessionsCache    *sync.Map // UserId -> Session adapterId list
+	adapters         *sync.Map // AdapterId -> *Adapter
 	routes           map[string]func(*Context[T]) Event
-}
-
-type ClientInfo[T any] struct {
-	ID        string // Identifier of the account
-	sessionID string // Identifier of the session
-	Data      T      // Session data you can decide how to fill
-}
-
-// Convert the client information to a client that can be used by neogate.
-func (info ClientInfo[T]) ToClient(conn *websocket.Conn) *Client[T] {
-
-	return &Client[T]{
-		Conn:    conn,
-		ID:      info.ID,
-		Session: info.sessionID,
-		Data:    info.Data,
-		Mutex:   &sync.Mutex{},
-	}
 }
 
 // ! If the functions aren't implemented pipesfiber will panic
 // The generic should be the type of the handshake request
 type Config[T any] struct {
-	// Called when a client attempts to connection. Return true if the connection is allowed.
+
+	// Called when a client attempts to connect(create a session). Return the session info and true if the connection is allowed.
 	// MUST BE SPECIFIED.
-	Handshake func(c *fiber.Ctx) (ClientInfo[T], bool)
+	Handshake func(c *fiber.Ctx) (SessionInfo[T], bool)
 
-	// Client handlers
-	ClientDisconnectHandler   func(client *Client[T])
-	ClientEnterNetworkHandler func(client *Client[T], data T) bool // Called after pipes adapter is registered, returns if the client should be disconnected (true = disconnect)
+	// Session handlers
+	SessionDisconnectHandler   func(session *Session[T])
+	SessionEnterNetworkHandler func(session *Session[T], data T) bool // Called after pipes adapter is registered, returns if the client should be disconnected (true = disconnect)
 
-	// Determines the id of the event adapter for a client.
-	// Returns id of account adapter based on client.ID, and if of session adapter based on client.Session
-	ClientAdapterHandler func(client *Client[T]) (string, string)
+	// Determines the id of the event adapter for a session.
+	// Returns id of user adapter based on session.GetUserId(), and if of session adapter based on session.GetSessionId()
+	SessionAdapterHandler func(session *Session[T]) (string, string)
 
 	// Codec middleware
-	ClientEncodingMiddleware func(client *Client[T], instance *Instance[T], message []byte) ([]byte, error)
-	DecodingMiddleware       func(client *Client[T], instance *Instance[T], message []byte) ([]byte, error)
+	EncodingMiddleware func(session *Session[T], instance *Instance[T], message []byte) ([]byte, error)
+	DecodingMiddleware func(session *Session[T], instance *Instance[T], message []byte) ([]byte, error)
 
 	// Error handler
 	ErrorHandler func(err error)
 }
 
-// Message received from the client
+// Message received from the session
 type Message[T any] struct {
 	Action string `json:"action"`
 	Data   T      `json:"data"`
 }
 
 // Default pipes-fiber encoding middleware (using JSON)
-func DefaultClientEncodingMiddleware[T any](client *Client[T], instance *Instance[T], message []byte) ([]byte, error) {
+func DefaultEncodingMiddleware[T any](session *Session[T], instance *Instance[T], message []byte) ([]byte, error) {
 	return message, nil
 }
 
 // Default pipes-fiber decoding middleware (using JSON)
-func DefaultDecodingMiddleware[T any](client *Client[T], instance *Instance[T], bytes []byte) ([]byte, error) {
+func DefaultDecodingMiddleware[T any](session *Session[T], instance *Instance[T], bytes []byte) ([]byte, error) {
 	return bytes, nil
 }
 
@@ -99,10 +81,10 @@ func (instance *Instance[T]) ReportGeneralError(context string, err error) {
 	instance.Config.ErrorHandler(fmt.Errorf("general: %s: %s", context, err.Error()))
 }
 
-func (instance *Instance[T]) ReportClientError(client *Client[T], context string, err error) {
+func (instance *Instance[T]) ReportSessionError(session *Session[T], context string, err error) {
 	if instance.Config.ErrorHandler == nil {
 		return
 	}
 
-	instance.Config.ErrorHandler(fmt.Errorf("client %s: %s: %s", client.ID, context, err.Error()))
+	instance.Config.ErrorHandler(fmt.Errorf("session %s of user %s: %s: %s", session.sessionId, session.userId, context, err.Error()))
 }
