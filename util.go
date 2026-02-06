@@ -20,3 +20,11 @@ func GenerateToken(tkLength int32) string {
 
 	return string(s)
 }
+
+type AdapterSendError struct {
+	AdapterErrors map[string]error // adapterId -> error
+}
+
+func (err *AdapterSendError) Error() string {
+	return "some adapters failed to send, convert to AdapterSendError to see specifics"
+}

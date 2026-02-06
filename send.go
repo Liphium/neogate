@@ -9,12 +9,23 @@ import (
 
 // SendEventToUser sends the event to all sessions connected to the userId
 func (instance *Instance[T]) SendEventToUser(userId string, event Event) error {
-	sessionIds, ok := instance.sessionsCache.Load(userId)
+
+	sessionList, ok := instance.sessionsCache.sessions.Load(userId)
 	if !ok {
 		return errors.New("no sessions found")
 	}
+	sessions := sessionList.(*SessionsList)
+	sessions.mutex.RLock()
+	sessionIds := sessions.sessions
+	sessions.mutex.RUnlock()
 
-	if err := instance.Send(sessionIds.([]string), event); err != nil {
+	adapterIds := []string{}
+	for _, sessionId := range sessionIds {
+		_, sessionAdapterName := instance.Config.SessionAdapterHandler(userId, sessionId)
+		adapterIds = append(adapterIds, sessionAdapterName)
+	}
+
+	if err := instance.Send(adapterIds, event); err != nil {
 		return err
 	}
 	return nil
@@ -52,10 +63,21 @@ func (instance *Instance[T]) Send(adapters []string, event Event) error {
 		return err
 	}
 
+	adapterErr := map[string]error{}
 	for _, adapter := range adapters {
-		instance.AdapterReceive(adapter, event, msg)
+		err := instance.AdapterReceive(adapter, event, msg)
+		if err != nil {
+			adapterErr[adapter] = err
+		}
 	}
-	return nil
+
+	if len(adapterErr) == 0 {
+		return nil
+	}
+
+	return &AdapterSendError{
+		AdapterErrors: adapterErr,
+	}
 }
 
 // Sends an event to the account.

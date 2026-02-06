@@ -16,9 +16,25 @@ var Log = log.New(log.Writer(), "neogate ", log.Flags())
 type Instance[T any] struct {
 	Config           Config[T]
 	connectionsCache *sync.Map // UserId:sessionId -> *Session
-	sessionsCache    *sync.Map // UserId -> Session adapterId list
+	sessionsCache    SessionCache
 	adapters         *sync.Map // AdapterId -> *Adapter
 	routes           map[string]func(*Context[T]) Event
+}
+
+type SessionCache struct {
+	mutex    *sync.Mutex
+	sessions *sync.Map // UserId -> SessionsList
+}
+
+type SessionsList struct {
+	mutex    *sync.RWMutex
+	sessions []string // session ids
+}
+
+func (sessionList *SessionsList) Add(sessionId string) {
+	sessionList.mutex.Lock()
+	defer sessionList.mutex.Unlock()
+	sessionList.sessions = append(sessionList.sessions, sessionId)
 }
 
 // ! If the functions aren't implemented pipesfiber will panic
@@ -35,7 +51,7 @@ type Config[T any] struct {
 
 	// Determines the id of the event adapter for a session.
 	// Returns id of user adapter based on session.GetUserId(), and if of session adapter based on session.GetSessionId()
-	SessionAdapterHandler func(session *Session[T]) (string, string)
+	SessionAdapterHandler func(userId string, sessionId string) (string, string)
 
 	// Codec middleware
 	EncodingMiddleware func(session *Session[T], instance *Instance[T], message []byte) ([]byte, error)
@@ -67,8 +83,11 @@ func Setup[T any](config Config[T]) *Instance[T] {
 		Config:           config,
 		adapters:         &sync.Map{},
 		connectionsCache: &sync.Map{},
-		sessionsCache:    &sync.Map{},
-		routes:           make(map[string]func(*Context[T]) Event),
+		sessionsCache: SessionCache{
+			sessions: &sync.Map{},
+			mutex:    &sync.Mutex{},
+		},
+		routes: make(map[string]func(*Context[T]) Event),
 	}
 	return instance
 }

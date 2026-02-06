@@ -96,7 +96,7 @@ func ws[T any](conn *websocket.Conn, instance *Instance[T]) {
 
 	// Add adapter for pipes (if this is the first session)
 	if len(instance.GetSessions(info.UserId)) == 1 {
-		userAdapterName, _ := instance.Config.SessionAdapterHandler(session)
+		userAdapterName, _ := instance.Config.SessionAdapterHandler(session.GetUserId(), session.GetSessionId())
 		instance.Adapt(CreateAction{
 			ID: userAdapterName,
 			OnEvent: func(c *AdapterContext) error {
