@@ -1,0 +1,25 @@
+## Reviewing rules
+
+### Providing little proof
+
+Everyone sometimes makes mistakes, you are the same. For every comment you leave in a MR review, provide "proof" in the form of a little code sample that proofs your point.
+
+Rules for these code samples:
+
+- Don't provide them when they are longer than 20 lines of code (without comments, logs and spaces)
+- Always nicely format them to make sure it's easily understood
+- Add comments to the code to explain what you are doing and why it proofs your point
+- Put them in a spoiler so they don't make the scrolling experience worse, like this:
+
+````md
+<details>
+  <summary>Spoiler warning</summary>
+  
+  Spoiler text. Note that it's important to have a space after the summary tag. You should be able to write any markdown you want inside the `<details>` tag... just make sure you close `<details>` afterward.
+  
+  ```javascript
+  console.log("I'm a code block!");
+  ```
+  
+</details>
+````
