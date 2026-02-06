@@ -3,13 +3,7 @@ package neogate
 import (
 	"crypto/rand"
 	"math/big"
-	"reflect"
 )
-
-// isTypeNone returns whether T is type None
-func isTypeNone[T any](t T) bool {
-	return reflect.TypeOf(t) == reflect.TypeOf(None{})
-}
 
 func GenerateToken(tkLength int32) string {
 	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
@@ -25,4 +19,12 @@ func GenerateToken(tkLength int32) string {
 	}
 
 	return string(s)
+}
+
+type AdapterSendError struct {
+	AdapterErrors map[string]error // adapterId -> error
+}
+
+func (err *AdapterSendError) Error() string {
+	return "some adapters failed to send, convert to AdapterSendError to see specifics"
 }

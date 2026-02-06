@@ -5,7 +5,7 @@ import (
 )
 
 type Context[T any] struct {
-	Client     *Client[T]
+	Session    *Session[T]
 	Action     string // The action to perform
 	ResponseId string
 	Data       []byte
@@ -44,8 +44,8 @@ func (instance *Instance[T]) Handle(ctx *Context[T]) bool {
 func (instance *Instance[T]) route(ctx *Context[T]) {
 	defer func() {
 		if err := recover(); err != nil {
-			Log.Println("recovered from error in action", ctx.Action, "by", ctx.Client.ID, ":", err)
-			if err := instance.SendEventToClient(ctx.Client, ErrorResponse(ctx, "Invalid request.", nil)); err != nil {
+			Log.Println("recovered from error in action", ctx.Action, "by", ctx.Session.userId, ":", err)
+			if err := instance.SendEventToSession(ctx.Session, ErrorResponse(ctx, "Invalid request.", nil)); err != nil {
 				Log.Println("couldn't send invalid event to connection after recover:", err)
 			}
 		}
@@ -55,7 +55,7 @@ func (instance *Instance[T]) route(ctx *Context[T]) {
 	res := instance.routes[ctx.Action](ctx)
 
 	// Send the action to the thing
-	err := instance.SendEventToClient(ctx.Client, res)
+	err := instance.SendEventToSession(ctx.Session, res)
 	if err != nil {
 		Log.Println("error while sending response to", ctx.Action, ":", err)
 	}
