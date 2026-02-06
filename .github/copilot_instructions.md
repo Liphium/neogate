@@ -8,6 +8,7 @@ Rules for these code samples:
 
 - The code samples should always be runnable using the programming language's tools (for example when writing something in Go, put it in `package main` and put it in a `main` function)
 - Don't provide them when they are longer than 20 lines of code (without comments, logs, imports + any other things needed to get your code to run)
+  - Keep the example as short as possible
 - Always nicely format them to make sure it's easily understood
 - Add comments to the code to explain what you are doing and why it proofs your point
 - Put them in a spoiler so they don't make the scrolling experience worse, like this:
