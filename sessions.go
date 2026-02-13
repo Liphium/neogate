@@ -92,36 +92,20 @@ func (instance *Instance[T]) createSession(session *Session[T]) {
 		},
 	})
 
-	sessionAny, ok := instance.sessionsCache.sessions.Load(session.GetUserId())
-	if ok {
-		sessionList := sessionAny.(*SessionsList)
-
-		sessionList.mutex.Lock()
-		defer sessionList.mutex.Unlock()
-
-		if sessionAny, ok = instance.sessionsCache.sessions.Load(session.GetUserId()); ok {
-			sessionList = sessionAny.(*SessionsList)
-			sessionList.sessions = append(sessionList.sessions, session.GetSessionId())
-			instance.sessionsCache.sessions.Store(session.GetUserId(), sessionList)
-			return
-		}
+	sessionList := &SessionsList{
+		mutex:    &sync.RWMutex{},
+		sessions: []string{session.GetSessionId()},
+	}
+	sessionAny, loaded := instance.sessions.LoadOrStore(session.GetUserId(), sessionList)
+	if loaded {
+		sessionList = sessionAny.(*SessionsList)
 	}
 
-	instance.sessionsCache.mutex.Lock()
+	sessionList.mutex.Lock()
+	defer sessionList.mutex.Unlock()
 
-	sessionAny, ok = instance.sessionsCache.sessions.Load(session.GetUserId())
-	if ok {
-		sessionList := sessionAny.(*SessionsList)
-		instance.sessionsCache.mutex.Unlock()
-
-		sessionList.Add(session.GetSessionId())
-	} else {
-		instance.sessionsCache.sessions.Store(session.GetUserId(), &SessionsList{
-			mutex:    &sync.RWMutex{},
-			sessions: []string{session.GetSessionId()},
-		})
-		instance.sessionsCache.mutex.Unlock()
-	}
+	sessionList.sessions = append(sessionList.sessions, session.GetSessionId())
+	instance.sessions.Store(session.GetUserId(), sessionList) // Store here in case the thing was deleted while the mutex was locked
 }
 
 func (instance *Instance[T]) removeSession(userId string, session string) {
@@ -130,10 +114,7 @@ func (instance *Instance[T]) removeSession(userId string, session string) {
 	_, sessionAdapter := instance.Config.SessionAdapterHandler(userId, session)
 	instance.RemoveAdapter(sessionAdapter)
 
-	instance.sessionsCache.mutex.Lock()
-	defer instance.sessionsCache.mutex.Unlock()
-
-	sessionAny, ok := instance.sessionsCache.sessions.Load(userId)
+	sessionAny, ok := instance.sessions.Load(userId)
 	if !ok {
 		return
 	}
@@ -145,22 +126,22 @@ func (instance *Instance[T]) removeSession(userId string, session string) {
 	sessionList.sessions = slices.DeleteFunc(sessionList.sessions, func(s string) bool {
 		return s == session
 	})
-	instance.sessionsCache.sessions.Store(userId, sessionList)
 
 	if len(sessionList.sessions) == 0 {
-		instance.sessionsCache.sessions.Delete(userId)
+		instance.sessions.Delete(userId)
 	}
 }
 
 func (instance *Instance[T]) GetSessions(userId string) []string {
-	sessionList, ok := instance.sessionsCache.sessions.Load(userId)
+	sessionListAny, ok := instance.sessions.Load(userId)
 	if !ok {
 		return []string{}
 	}
-	sessions := sessionList.(*SessionsList)
-	sessions.mutex.RLock()
-	sessionIds := sessions.sessions
-	sessions.mutex.RUnlock()
+	sessionList := sessionListAny.(*SessionsList)
+	sessionList.mutex.RLock()
+	sessionIds := make([]string, len(sessionList.sessions))
+	copy(sessionIds, sessionList.sessions)
+	sessionList.mutex.RUnlock()
 
 	return sessionIds
 }

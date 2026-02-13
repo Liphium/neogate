@@ -55,14 +55,5 @@ func (instance *Instance[T]) Get(userId string, sessionId string) (*Session[T], 
 }
 
 func (instance *Instance[T]) GetConnections(userId string) int {
-	sessionList, ok := instance.sessionsCache.sessions.Load(userId)
-	if !ok {
-		return 0
-	}
-	sessions := sessionList.(*SessionsList)
-	sessions.mutex.RLock()
-	sessionIds := sessions.sessions
-	sessions.mutex.RUnlock()
-
-	return len(sessionIds)
+	return len(instance.GetSessions(userId))
 }
