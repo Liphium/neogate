@@ -97,7 +97,7 @@ func (instance *Instance[T]) ReportGeneralError(context string, err error) {
 		return
 	}
 
-	instance.Config.ErrorHandler(fmt.Errorf("general: %s: %s", context, err.Error()))
+	instance.Config.ErrorHandler(fmt.Errorf("general: %s: %v", context, err))
 }
 
 func (instance *Instance[T]) ReportSessionError(session *Session[T], context string, err error) {
@@ -105,5 +105,5 @@ func (instance *Instance[T]) ReportSessionError(session *Session[T], context str
 		return
 	}
 
-	instance.Config.ErrorHandler(fmt.Errorf("session %s of user %s: %s: %s", session.sessionId, session.userId, context, err.Error()))
+	instance.Config.ErrorHandler(fmt.Errorf("session %s of user %s: %s: %v", session.sessionId, session.userId, context, err))
 }
