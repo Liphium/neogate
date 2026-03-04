@@ -104,7 +104,9 @@ func (instance *Instance[T]) createSession(session *Session[T]) {
 	sessionList.mutex.Lock()
 	defer sessionList.mutex.Unlock()
 
-	sessionList.sessions = append(sessionList.sessions, session.GetSessionId())
+	if loaded {
+		sessionList.sessions = append(sessionList.sessions, session.GetSessionId())
+	}
 	instance.sessions.Store(session.GetUserId(), sessionList) // Store here in case the thing was deleted while the mutex was locked
 }
 
