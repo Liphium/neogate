@@ -16,14 +16,9 @@ var Log = log.New(log.Writer(), "neogate ", log.Flags())
 type Instance[T any] struct {
 	Config           Config[T]
 	connectionsCache *sync.Map // UserId:sessionId -> *Session
-	sessionsCache    SessionCache
+	sessions         *sync.Map // UserId -> SessionsList
 	adapters         *sync.Map // AdapterId -> *Adapter
 	routes           map[string]func(*Context[T]) Event
-}
-
-type SessionCache struct {
-	mutex    *sync.Mutex
-	sessions *sync.Map // UserId -> SessionsList
 }
 
 type SessionsList struct {
@@ -83,11 +78,8 @@ func Setup[T any](config Config[T]) *Instance[T] {
 		Config:           config,
 		adapters:         &sync.Map{},
 		connectionsCache: &sync.Map{},
-		sessionsCache: SessionCache{
-			sessions: &sync.Map{},
-			mutex:    &sync.Mutex{},
-		},
-		routes: make(map[string]func(*Context[T]) Event),
+		sessions:         &sync.Map{},
+		routes:           make(map[string]func(*Context[T]) Event),
 	}
 	return instance
 }

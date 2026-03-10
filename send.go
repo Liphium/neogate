@@ -1,26 +1,16 @@
 package neogate
 
 import (
-	"errors"
-
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/websocket/v2"
 )
 
 // SendEventToUser sends the event to all sessions connected to the userId
 func (instance *Instance[T]) SendEventToUser(userId string, event Event) error {
-
-	sessionList, ok := instance.sessionsCache.sessions.Load(userId)
-	if !ok {
-		return errors.New("no sessions found")
-	}
-	sessions := sessionList.(*SessionsList)
-	sessions.mutex.RLock()
-	sessionIds := sessions.sessions
-	sessions.mutex.RUnlock()
+	sessions := instance.GetSessions(userId)
 
 	adapterIds := []string{}
-	for _, sessionId := range sessionIds {
+	for _, sessionId := range sessions {
 		_, sessionAdapterName := instance.Config.SessionAdapterHandler(userId, sessionId)
 		adapterIds = append(adapterIds, sessionAdapterName)
 	}
