@@ -5,7 +5,7 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
-// BroadcastEvent sends the message to all sessions.
+// Broadcast sends the message to all sessions.
 func (instance *Instance[T]) Broadcast(msg []byte) error {
 	sendErrs := map[string]error{}
 	instance.connectionsCache.Range(func(key, value any) bool {
@@ -24,7 +24,7 @@ func (instance *Instance[T]) Broadcast(msg []byte) error {
 	}
 
 	return &SessionSendError{
-		AdapterErrors: sendErrs,
+		SessionErrors: sendErrs,
 	}
 }
 

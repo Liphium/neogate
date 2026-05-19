@@ -30,7 +30,7 @@ func (err *AdapterSendError) Error() string {
 }
 
 type SessionSendError struct {
-	AdapterErrors map[string]error // UserId:sessionId -> error
+	SessionErrors map[string]error // UserId:sessionId -> error
 }
 
 func (err *SessionSendError) Error() string {
