@@ -1,9 +1,60 @@
 package neogate
 
 import (
+	"sync"
+
 	"github.com/bytedance/sonic"
 	"github.com/gofiber/websocket/v2"
 )
+
+// Broadcast sends the message to all sessions.
+func (instance *Instance[T]) Broadcast(msg []byte) error {
+	syncSendErrs := &sync.Map{}
+	wg := &sync.WaitGroup{}
+
+	instance.connectionsCache.Range(func(key, value any) bool {
+		wg.Go(func() {
+			id := key.(string)
+			session := value.(*Session[T])
+			err := instance.sendToSessionWS(session, msg)
+			if err != nil {
+				syncSendErrs.Store(id, err)
+			}
+		})
+
+		return true
+	})
+
+	wg.Wait()
+
+	// Collect errors
+	sendErrs := make(map[string]error)
+	syncSendErrs.Range(func(key, value any) bool {
+		id := key.(string)
+		err := value.(error)
+
+		sendErrs[id] = err
+		return true
+	})
+
+	if len(sendErrs) == 0 {
+		return nil
+	}
+
+	return SessionSendError{
+		SessionErrors: sendErrs,
+	}
+}
+
+// BroadcastEvent sends the event to all sessions. This is just a wrapper for Broadcast that handles encoding.
+func (instance *Instance[T]) BroadcastEvent(event Event) error {
+	msg, err := sonic.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	return instance.Broadcast(msg)
+}
 
 // SendEventToUser sends the event to all sessions connected to the userId
 func (instance *Instance[T]) SendEventToUser(userId string, event Event) error {
@@ -65,7 +116,7 @@ func (instance *Instance[T]) Send(adapters []string, event Event) error {
 		return nil
 	}
 
-	return &AdapterSendError{
+	return AdapterSendError{
 		AdapterErrors: adapterErr,
 	}
 }

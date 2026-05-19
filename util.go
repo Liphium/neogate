@@ -25,6 +25,14 @@ type AdapterSendError struct {
 	AdapterErrors map[string]error // adapterId -> error
 }
 
-func (err *AdapterSendError) Error() string {
+func (err AdapterSendError) Error() string {
 	return "some adapters failed to send, convert to AdapterSendError to see specifics"
+}
+
+type SessionSendError struct {
+	SessionErrors map[string]error // UserId:sessionId -> error
+}
+
+func (err SessionSendError) Error() string {
+	return "some sessions failed to send, convert to SessionSendError to see specifics"
 }
