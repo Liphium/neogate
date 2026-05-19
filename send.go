@@ -5,6 +5,39 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
+// BroadcastEvent sends the message to all sessions.
+func (instance *Instance[T]) Broadcast(msg []byte) error {
+	sendErrs := map[string]error{}
+	instance.connectionsCache.Range(func(key, value any) bool {
+		id := key.(string)
+		session := value.(*Session[T])
+		err := instance.sendToSessionWS(session, msg)
+		if err != nil {
+			sendErrs[id] = err
+		}
+
+		return true
+	})
+
+	if len(sendErrs) == 0 {
+		return nil
+	}
+
+	return &SessionSendError{
+		AdapterErrors: sendErrs,
+	}
+}
+
+// BroadcastEvent sends the event to all sessions. This is just a wrapper for Broadcast that handles encoding.
+func (instance *Instance[T]) BroadcastEvent(event Event) error {
+	msg, err := sonic.Marshal(event)
+	if err != nil {
+		return err
+	}
+
+	return instance.Broadcast(msg)
+}
+
 // SendEventToUser sends the event to all sessions connected to the userId
 func (instance *Instance[T]) SendEventToUser(userId string, event Event) error {
 	sessions := instance.GetSessions(userId)
